@@ -1,50 +1,48 @@
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
-#include <stdlib.h>
-#include <stdio.h>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <stdlib.h>
+#include <stdio.h>
 
-#define WRONG "Wrong number of arguments\n"
-#define FATAL "Fatal error\n"
-#define BUF 200000
-#define PORT 65000
-
-int maxfd, id, sockfd = 0;
-int arr[PORT];
-char buff[BUF + 100];
+int maxfd, id = 0, sockfd = 0;
+int arr[65000];
+char buff[200100];
 fd_set aset, rset, wset; 
 
-void	fatal(char *er)
+void fatal(char *error)
 {
 	if (sockfd > 2)
 		close(sockfd);
-	write(2, er, strlen(er));
+	write(2, error, strlen(error));
 	exit(1);
 }
 
-void	send_all(int connfd)
+void	sending(int connfd)
 {
-	for(int fd = 2; fd <= maxfd; fd++)
+	for (int fd = 3; fd <= maxfd; ++fd)
 		if (fd != connfd && FD_ISSET(fd, &wset))
 			if (send(fd, buff, strlen(buff), 0) < 0)
-				fatal(FATAL);
+				fatal("Fatal error\n");
+
+	bzero(&buff, sizeof(buff));
 }
 
 int main(int ac, char **av)
 {
-	if (ac != 2)
-		fatal(WRONG);
+	if (ac == 1)
+		fatal("Wrong number of arguments\n");
 
 	int connfd;
 	socklen_t len;
 	struct sockaddr_in servaddr, cli; 
 
+	// socket create and verification 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0); 
 	if (sockfd == -1)
-		fatal(FATAL);
+		fatal("Fatal error\n");
 	bzero(&servaddr, sizeof(servaddr)); 
 
 	// assign IP, PORT 
@@ -54,13 +52,12 @@ int main(int ac, char **av)
   
 	// Binding newly created socket to given IP and verification 
 	if ((bind(sockfd, (const struct sockaddr *)&servaddr, sizeof(servaddr))) != 0)
-		fatal(FATAL);
+		fatal("Fatal error\n");
 
 	if (listen(sockfd, 10) != 0)
-		fatal(FATAL);
+		fatal("Fatal error\n");
 
 	len = sizeof(cli);
-	id = 0;
 	maxfd = sockfd;
 	FD_ZERO(&aset);
 	FD_SET(sockfd, &aset);
@@ -74,21 +71,21 @@ int main(int ac, char **av)
 		{
 			connfd = accept(sockfd, (struct sockaddr *)&cli, &len);
 			if (connfd < 0)
-				fatal(FATAL);
-			sprintf(buff, "server: client %d just arrived\n", id);
+				fatal("Fatal error\n");
 			FD_SET(connfd, &aset);
+			sprintf(buff, "server: client %d just arrived\n", id);
 			arr[connfd] = id++;
-			send_all(connfd);
+			sending(connfd);
 			maxfd = connfd > maxfd ? connfd : maxfd;
 			continue;
 		}
 
-		for (int fd = 2; fd <= maxfd; ++fd)
+		for (int fd = 3; fd <= maxfd; ++fd)
 		{
 			if (FD_ISSET(fd, &rset))
 			{
 				int r = 1;
-				char msg[BUF];
+				char msg[20000];
 				bzero (&msg, sizeof(msg));
 				while(r == 1 && msg[strlen(msg) - 1] != '\n')
 					r = recv(fd, msg + strlen(msg), 1, 0);
@@ -100,7 +97,8 @@ int main(int ac, char **av)
 				}
 				else
 					sprintf(buff, "client %d: %s", arr[fd], msg);
-				send_all(fd);
+
+				sending(fd);
 			}
 		}
 	}
